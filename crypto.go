@@ -10,6 +10,7 @@ import (
 	"github.com/aead/chacha20"
 	"github.com/btcsuite/btcd/btcec/v2"
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
+	"golang.org/x/crypto/chacha20poly1305"
 )
 
 const (
@@ -197,6 +198,34 @@ func blindBaseElement(blindingFactor btcec.ModNScalar) *btcec.PublicKey {
 	// this method
 	priv := secp.NewPrivateKey(&blindingFactor)
 	return priv.PubKey()
+}
+
+// chacha20polyEncrypt initialises the ChaCha20Poly1305 algorithm with the given
+// key and uses it to encrypt the passed message.
+func chacha20polyEncrypt(key, msg []byte) ([]byte, error) {
+	aead, err := chacha20poly1305.New(key)
+	if err != nil {
+		return nil, err
+	}
+
+	nonce := bytes.Repeat([]byte{0x00}, aead.NonceSize())
+
+	// Encrypt the message and append the ciphertext to the nonce.
+	return aead.Seal(nil, nonce, msg, nil), nil
+}
+
+// chacha20polyDecrypt initialises the ChaCha20Poly1305 algorithm with the given
+// key and uses it to decrypt the passed cipher text.
+func chacha20polyDecrypt(key, cipherTxt []byte) ([]byte, error) {
+	aead, err := chacha20poly1305.New(key)
+	if err != nil {
+		return nil, err
+	}
+
+	nonce := bytes.Repeat([]byte{0x00}, aead.NonceSize())
+
+	// Decrypt the message and append the ciphertext to the nonce.
+	return aead.Open(nil, nonce, cipherTxt, nil)
 }
 
 // sharedSecretGenerator is an interface that abstracts away exactly *how* the
