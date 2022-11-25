@@ -251,6 +251,7 @@ func NewOnionPacket(paymentPath *PaymentPath, sessionKey *btcec.PrivateKey,
 		// The HMAC for the final hop is simply zeroes. This allows the
 		// last hop to recognize that it is the destination for a
 		// particular payment.
+		// NOTE(9/15/22): This implicitly sets HMAC for the final hop to zeroHMAC!!!
 		paymentPath[i].HopPayload.HMAC = nextHmac
 
 		// Next, using the key dedicated for our stream cipher, we'll
@@ -464,6 +465,9 @@ type ProcessedPacket struct {
 	//
 	// NOTE: This field will only be populated iff the above Action is
 	// MoreHops.
+	//
+	// NOTE(9/15/22): With the above, a check for nil ForwardingInstructions
+	// is equivalent to a check if we are the final hop!
 	ForwardingInstructions *HopData
 
 	// Payload is the raw payload as extracted from the packet. If the
