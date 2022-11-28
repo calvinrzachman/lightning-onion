@@ -74,6 +74,9 @@ type ReplayLog interface {
 // sphinx packets and processed batches in memory with no persistence.
 //
 // This is designed for use just in testing.
+//
+// NOTE(11/25/22): We DO NOT use this in production. We instead use the
+// htlcswitch.DecayedLog.
 type MemoryReplayLog struct {
 	batches map[string]*ReplaySet
 	entries map[HashPrefix]uint32

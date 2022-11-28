@@ -508,6 +508,12 @@ func NewRouter(nodeKey SingleKeyECDH, net *chaincfg.Params, log ReplayLog) *Rout
 	return &Router{
 		nodeID:   nodeID,
 		nodeAddr: nodeAddr,
+		// Configure our sphinx onion packet router with
+		// our node's key pair (p, P).
+		// This is the  private key with which we will establish
+		// shared secrets with onion encryptors.
+		// NOTE(11/27/22): Will we need to be able to use a blind
+		// version of this key when processing blind hops?
 		onionKey: nodeKey,
 		log:      log,
 	}

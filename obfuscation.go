@@ -15,6 +15,10 @@ type OnionErrorEncrypter struct {
 // NewOnionErrorEncrypter creates new instance of the onion encrypter backed by
 // the passed router, with encryption to be doing using the passed
 // ephemeralKey.
+//
+// NOTE(11/27/22): What ephemeral key is used here?
+// With whom do we establish a shared secret?
+// This is called by iterator.OnionProcessor.ExtractErrorEncrypter().
 func NewOnionErrorEncrypter(router *Router,
 	ephemeralKey *btcec.PublicKey) (*OnionErrorEncrypter, error) {
 
@@ -28,6 +32,8 @@ func NewOnionErrorEncrypter(router *Router,
 	}, nil
 }
 
+// NOTE(11/27/22): The shared secret is our encryptor's state.
+// It is all we need to recover and keep on en/decrypting things.
 // Encode writes the encrypter's shared secret to the provided io.Writer.
 func (o *OnionErrorEncrypter) Encode(w io.Writer) error {
 	_, err := w.Write(o.sharedSecret[:])
@@ -119,6 +125,9 @@ type OnionErrorDecrypter struct {
 }
 
 // NewOnionErrorDecrypter creates new instance of onion decrypter.
+//
+// NOTE(11/27/22): Called from payment_lifecycle.go and is used to
+// GetPaymentResult() from control tower?
 func NewOnionErrorDecrypter(circuit *Circuit) *OnionErrorDecrypter {
 	return &OnionErrorDecrypter{
 		circuit: circuit,
