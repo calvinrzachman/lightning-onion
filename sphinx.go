@@ -755,6 +755,11 @@ func (t *Tx) ProcessOnionPacket(seqNum uint16, onionPkt *OnionPacket,
 	// Continue to optimistically process this packet, deferring replay
 	// protection until the end to reduce the penalty of multiple IO
 	// operations.
+	//
+	// NOTE(1/16/23): I suppose it could be that checking for replay is more
+	// expensive than processing the packet. However, if we must check
+	// for replay anyway, why not check first and avoid processing packets
+	// which are replays?
 	packet, err := processOnionPacket(
 		onionPkt, &sharedSecret, assocData, t.router,
 	)
@@ -767,6 +772,14 @@ func (t *Tx) ProcessOnionPacket(seqNum uint16, onionPkt *OnionPacket,
 
 	// Add the hash prefix to pending batch of shared secrets that will be
 	// written later via Commit().
+	//
+	// QUESTION(1/16/23): Under which scenario would this (in-memory?)
+	// batch add fail so we avoid caching the processed packet below?
+	// ANSWER: This method only returns an error in the event that the
+	// batch was already committed to disk.
+	//
+	// NOTE(1/16/23): We incrementally build up an in-memory batch
+	// or list of ADDs we are processing.
 	err = t.batch.Put(seqNum, hashPrefix, incomingCltv)
 	if err != nil {
 		return err
@@ -788,6 +801,17 @@ func (t *Tx) Commit() ([]ProcessedPacket, *ReplaySet, error) {
 		return t.packets, t.batch.ReplaySet, nil
 	}
 
+	// Writes (hash, cltv) key-pairs to disk for all
+	// payment hash prefixes previously unseen which
+	// we accumulated in our in-memory batch.
+	// We write a replay set which indicates which
+	// of the batch are replays to disk as well.
+	//
+	// NOTE(1/16/23): Repeated invocations of this function
+	// will have better performance as we can just return the
+	// result of our previous computation of the replay set
+	// for this batch. This would not work if we called this
+	// with varying batches for the same ID??
 	rs, err := t.router.log.PutBatch(t.batch)
 
 	return t.packets, rs, err

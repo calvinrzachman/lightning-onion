@@ -40,6 +40,9 @@ type Batch struct {
 // idempotent result.
 func NewBatch(id []byte) *Batch {
 	return &Batch{
+		// NOTE(1/16/23): In practice this is the ID of the forwarding
+		// package which holds all remote ADDs which are irrevocably committed
+		// at the same commitment height.
 		ID:          id,
 		ReplaySet:   NewReplaySet(),
 		entries:     make(map[uint16]batchEntry),
@@ -68,6 +71,9 @@ func (b *Batch) Put(seqNum uint16, hashPrefix *HashPrefix, cltv uint32) error {
 	// our list of entries that we will try to write to disk. Each of these
 	// entries will be checked again during the commit to see if any other
 	// on-disk entries contain the same hash prefix.
+	//
+	// NOTE(1/16/23): Due to the protetion above, we will only write the same
+	// payment hash prefix once.
 	b.entries[seqNum] = batchEntry{
 		hashPrefix: *hashPrefix,
 		cltv:       cltv,
@@ -83,6 +89,9 @@ func (b *Batch) Put(seqNum uint16, hashPrefix *HashPrefix, cltv uint32) error {
 
 // ForEach iterates through each entry in the batch and calls the provided
 // function with the sequence number and entry contents as arguments.
+//
+// NOTE(1/16/23): This is highly general in its construction.
+// How is it used in practice?
 func (b *Batch) ForEach(fn func(seqNum uint16, hashPrefix *HashPrefix, cltv uint32) error) error {
 	for seqNum, entry := range b.entries {
 		if err := fn(seqNum, &entry.hashPrefix, entry.cltv); err != nil {
