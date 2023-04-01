@@ -251,6 +251,7 @@ func NewOnionPacket(paymentPath *PaymentPath, sessionKey *btcec.PrivateKey,
 		// The HMAC for the final hop is simply zeroes. This allows the
 		// last hop to recognize that it is the destination for a
 		// particular payment.
+		// NOTE(9/15/22): This implicitly sets HMAC for the final hop to zeroHMAC!!!
 		paymentPath[i].HopPayload.HMAC = nextHmac
 
 		// Next, using the key dedicated for our stream cipher, we'll
@@ -464,6 +465,9 @@ type ProcessedPacket struct {
 	//
 	// NOTE: This field will only be populated iff the above Action is
 	// MoreHops.
+	//
+	// NOTE(9/15/22): With the above, a check for nil ForwardingInstructions
+	// is equivalent to a check if we are the final hop!
 	ForwardingInstructions *HopData
 
 	// Payload is the raw payload as extracted from the packet. If the
@@ -504,6 +508,12 @@ func NewRouter(nodeKey SingleKeyECDH, net *chaincfg.Params, log ReplayLog) *Rout
 	return &Router{
 		nodeID:   nodeID,
 		nodeAddr: nodeAddr,
+		// Configure our sphinx onion packet router with
+		// our node's key pair (p, P).
+		// This is the  private key with which we will establish
+		// shared secrets with onion encryptors.
+		// NOTE(11/27/22): Will we need to be able to use a blind
+		// version of this key when processing blind hops?
 		onionKey: nodeKey,
 		log:      log,
 	}
@@ -745,6 +755,11 @@ func (t *Tx) ProcessOnionPacket(seqNum uint16, onionPkt *OnionPacket,
 	// Continue to optimistically process this packet, deferring replay
 	// protection until the end to reduce the penalty of multiple IO
 	// operations.
+	//
+	// NOTE(1/16/23): I suppose it could be that checking for replay is more
+	// expensive than processing the packet. However, if we must check
+	// for replay anyway, why not check first and avoid processing packets
+	// which are replays?
 	packet, err := processOnionPacket(
 		onionPkt, &sharedSecret, assocData, t.router,
 	)
@@ -757,6 +772,14 @@ func (t *Tx) ProcessOnionPacket(seqNum uint16, onionPkt *OnionPacket,
 
 	// Add the hash prefix to pending batch of shared secrets that will be
 	// written later via Commit().
+	//
+	// QUESTION(1/16/23): Under which scenario would this (in-memory?)
+	// batch add fail so we avoid caching the processed packet below?
+	// ANSWER: This method only returns an error in the event that the
+	// batch was already committed to disk.
+	//
+	// NOTE(1/16/23): We incrementally build up an in-memory batch
+	// or list of ADDs we are processing.
 	err = t.batch.Put(seqNum, hashPrefix, incomingCltv)
 	if err != nil {
 		return err
@@ -778,6 +801,17 @@ func (t *Tx) Commit() ([]ProcessedPacket, *ReplaySet, error) {
 		return t.packets, t.batch.ReplaySet, nil
 	}
 
+	// Writes (hash, cltv) key-pairs to disk for all
+	// payment hash prefixes previously unseen which
+	// we accumulated in our in-memory batch.
+	// We write a replay set which indicates which
+	// of the batch are replays to disk as well.
+	//
+	// NOTE(1/16/23): Repeated invocations of this function
+	// will have better performance as we can just return the
+	// result of our previous computation of the replay set
+	// for this batch. This would not work if we called this
+	// with varying batches for the same ID??
 	rs, err := t.router.log.PutBatch(t.batch)
 
 	return t.packets, rs, err
